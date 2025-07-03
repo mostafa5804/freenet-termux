@@ -1,12 +1,13 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-echo "🔧 نصب وابستگی‌ها..."
+echo "📦 نصب پیش‌نیازها..."
 pkg update -y
-pkg install -y python git
+pkg install -y python git termux-api
 
-echo "📦 نصب کتابخانه‌های مورد نیاز..."
 pip install --upgrade pip
-pip install requests
+pip install requests colorama qrcode
 
-echo "✅ اجرا..."
-python freenet_cli.py --count 30
+termux-setup-storage
+
+echo "🚀 اجرای FreeNet Advanced..."
+python freenet_advanced.py
