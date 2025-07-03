@@ -19,8 +19,8 @@
 
 ۱. **کلون کردن ریپازیتوری**:
     ```bash
-    git clone [https://github.com/mostafa5804/freenet-termux.git](https://github.com/mostafa5804/freenet-termux.git)
-    cd freenet-termux
+    curl -sL https://raw.githubusercontent.com/mostafa5804/freenet-termux/main/install.sh | bash
+
     ```
 
 ۲. **اجرای اسکریپت نصب**:
