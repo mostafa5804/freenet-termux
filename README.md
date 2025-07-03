@@ -13,7 +13,7 @@
 
 ## 🔧 نصب سریع:
 ```bash
-curl -sL https://raw.githubusercontent.com/username/freenet-termux-advanced/main/install.sh | bash
+curl -sL https://raw.githubusercontent.com/mostafa5804/freenet-termux-advanced/main/install.sh | bash
 ```
 
 ## 📁 فایل‌های خروجی:
