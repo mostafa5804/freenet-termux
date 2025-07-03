@@ -6,60 +6,77 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}--- شروع نصب Freenet برای Termux ---${NC}"
+# --- Installation Directory ---
+INSTALL_DIR="$HOME/freenet-termux"
+REPO_URL="https://github.com/mostafa5804/freenet-termux.git"
 
-# 1. Update packages and install dependencies
-echo -e "\n${YELLOW}مرحله ۱: به‌روزرسانی پکیج‌ها و نصب وابستگی‌ها...${NC}"
+echo -e "${GREEN}--- Starting Freenet for Termux Installation ---${NC}"
+
+# 1. Update packages and install Git first
+echo -e "\n${YELLOW}Step 1: Updating packages and installing Git...${NC}"
 pkg update -y && pkg upgrade -y
-pkg install -y python git unzip termux-api
+pkg install -y git
 
-# 2. Setup storage access
-echo -e "\n${YELLOW}مرحله ۲: درخواست دسترسی به حافظه داخلی...${NC}"
+# 2. Clone the repository
+echo -e "\n${YELLOW}Step 2: Cloning the Freenet repository...${NC}"
+if [ -d "$INSTALL_DIR" ]; then
+    echo "An existing installation was found. Backing it up..."
+    mv "$INSTALL_DIR" "$INSTALL_DIR-$(date +%s).bak"
+fi
+git clone "$REPO_URL" "$INSTALL_DIR"
+cd "$INSTALL_DIR" || { echo -e "${RED}Failed to change directory to $INSTALL_DIR. Aborting.${NC}"; exit 1; }
+
+# 3. Install other dependencies
+echo -e "\n${YELLOW}Step 3: Installing dependencies (Python, Unzip, Termux-API)...${NC}"
+pkg install -y python unzip termux-api
+
+# 4. Setup storage access
+echo -e "\n${YELLOW}Step 4: Requesting storage access...${NC}"
 termux-setup-storage
-echo -e "${GREEN}دسترسی به حافظه باید تایید شود. اگر پنجره‌ای باز شد، 'Allow' را بزنید.${NC}"
+echo -e "${GREEN}Please grant storage permission if a popup appears.${NC}"
 sleep 3
 
-# 3. Install Python requirements
-echo -e "\n${YELLOW}مرحله ۳: نصب کتابخانه‌های پایتون...${NC}"
+# 5. Install Python requirements
+echo -e "\n${YELLOW}Step 5: Installing Python libraries...${NC}"
 if [ -f "requirements.txt" ]; then
+    pip install --upgrade pip
     pip install -r requirements.txt
 else
-    echo -e "${RED}خطا: فایل requirements.txt یافت نشد!${NC}"
+    echo -e "${RED}Error: requirements.txt not found! Aborting.${NC}"
     exit 1
 fi
 
-# 4. Download and set up Xray-core
-echo -e "\n${YELLOW}مرحله ۴: دانلود و نصب Xray-core...${NC}"
-# Find the latest release URL for linux-arm64-v8a
+# 6. Download and set up Xray-core
+echo -e "\n${YELLOW}Step 6: Downloading and setting up Xray-core...${NC}"
 XRAY_LATEST_URL=$(curl -s "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | grep "browser_download_url.*Xray-linux-arm64-v8a.zip" | cut -d : -f 2,3 | tr -d \")
 
 if [ -z "$XRAY_LATEST_URL" ]; then
-    echo -e "${RED}خطا: امکان یافتن لینک دانلود آخرین نسخه Xray وجود ندارد!${NC}"
+    echo -e "${RED}Error: Could not find the latest Xray-core download URL. Aborting.${NC}"
     exit 1
 fi
 
-echo "در حال دانلود از: $XRAY_LATEST_URL"
+echo "Downloading from: $XRAY_LATEST_URL"
 curl -L -o xray.zip "$XRAY_LATEST_URL"
 
 if [ $? -ne 0 ]; then
-    echo -e "${RED}دانلود Xray با خطا مواجه شد.${NC}"
+    echo -e "${RED}Failed to download Xray-core.${NC}"
     exit 1
 fi
 
-echo "خارج کردن از حالت فشرده..."
+echo "Extracting xray..."
 unzip -o xray.zip xray
 rm xray.zip
 chmod +x xray
 
 if [ -f "xray" ]; then
-    echo -e "${GREEN}Xray-core با موفقیت نصب شد.${NC}"
+    echo -e "${GREEN}Xray-core installed successfully.${NC}"
 else
-    echo -e "${RED}نصب Xray با خطا مواجه شد.${NC}"
+    echo -e "${RED}Failed to install Xray-core.${NC}"
     exit 1
 fi
 
-
-# 5. Final instructions
-echo -e "\n\n${GREEN}--- نصب با موفقیت به پایان رسید! ---${NC}"
-echo -e "برای اجرای برنامه، دستور زیر را وارد کنید:"
-echo -e "${YELLOW}python freenet_termux.py${NC}"
+# 7. Final instructions
+echo -e "\n\n${GREEN}--- Installation Complete! ---${NC}"
+echo -e "To run the application, use the following commands:"
+echo -e "1. Change directory: ${YELLOW}cd $INSTALL_DIR${NC}"
+echo -e "2. Run the script:   ${YELLOW}python freenet_termux.py${NC}"
