@@ -8,9 +8,9 @@ NC='\033[0m'
 
 echo -e "${GREEN}--- Starting Freenet for Termux Installation ---${NC}"
 
-# 1. Update packages and install dependencies
-echo -e "\n${YELLOW}Step 1: Installing system dependencies (Python, Unzip, Curl, Termux-API)...${NC}"
-pkg install -y python unzip curl termux-api
+# 1. Install system dependencies
+echo -e "\n${YELLOW}Step 1: Installing system dependencies (Python, Unzip, Termux-API)...${NC}"
+pkg install -y python unzip termux-api
 
 # 2. Setup storage access
 echo -e "\n${YELLOW}Step 2: Requesting storage access...${NC}"
@@ -26,36 +26,21 @@ else
     exit 1
 fi
 
-# 4. Download and set up Xray-core from official source
-echo -e "\n${YELLOW}Step 4: Downloading and setting up Xray-core...${NC}"
-# Find and download the latest Xray-core for arm64
-XRAY_LATEST_URL=$(curl -s "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | grep "browser_download_url.*Xray-linux-arm64-v8a.zip" | cut -d : -f 2,3 | tr -d \")
+# 4. Set up Xray-core from the local ZIP file
+echo -e "\n${YELLOW}Step 4: Setting up Xray-core from local archive...${NC}"
+XRAY_ZIP_FILE="xray.zip"
 
-if [ -z "$XRAY_LATEST_URL" ]; then
-    echo -e "${RED}Error: Could not find the latest Xray-core download URL. Aborting.${NC}"
-    exit 1
-fi
-
-echo "Downloading Xray from official source..."
-curl -L -o xray.zip "$XRAY_LATEST_URL"
-
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Failed to download Xray-core.${NC}"
-    exit 1
-fi
-
-echo "Extracting xray..."
-unzip -o xray.zip xray
-rm xray.zip
-chmod +x xray
-
-if [ -f "xray" ]; then
-    echo -e "${GREEN}Xray-core installed successfully.${NC}"
+if [ -f "$XRAY_ZIP_FILE" ]; then
+    echo "Extracting local Xray archive (xray.zip)..."
+    # Extract only the 'xray' executable, overwrite if exists
+    unzip -o "$XRAY_ZIP_FILE" xray
+    # Make it executable
+    chmod +x xray
+    echo -e "${GREEN}Xray is ready.${NC}"
 else
-    echo -e "${RED}Failed to install Xray-core.${NC}"
+    echo -e "${RED}Error: $XRAY_ZIP_FILE not found! Aborting.${NC}"
     exit 1
 fi
-
 
 # 5. Final instructions
 echo -e "\n\n${GREEN}--- Installation Complete! ---${NC}"
