@@ -1,43 +1,21 @@
+# Freenet for Termux
 
-### `README_FA.md` (فارسی)
-```markdown
-# Freenet برای Termux
+A command-line tool for Termux to fetch, test, and find the fastest V2Ray configurations from various public sources.
 
-یک ابزار خط فرمان (CLI) برای دریافت و تست سرعت (latency) کانفیگ‌های V2Ray که از پروژه گرافیکی Freenet برای اجرا در محیط ترموکس اندروید اقتباس شده است.
+![Screenshot](https://raw.githubusercontent.com/mostafa5804/freenet-termux/main/freenet.jpg)
 
-## ویژگی‌ها
+## Features
 
--   **رابط کاربری تعاملی**: محیط خط فرمان رنگی و کاربرپسند.
--   **منابع کانفیگ**: دریافت کانفیگ از چندین منبع (Mirror) قابل انتخاب.
--   **فیلتر کردن**: قابلیت فیلتر کانفیگ‌ها بر اساس نوع پروتکل (Vmess, Vless و...).
--   **تست سرعت**: تست همزمان تعداد مشخصی از کانفیگ‌ها برای یافتن سریع‌ترین آن‌ها.
--   **ذخیره ۱۰ کانفیگ برتر**: ذخیره خودکار ۱۰ کانفیگ سریع‌تر در یک فایل متنی.
--   **نوتیفیکیشن اندروید**: ارسال اعلان پس از پایان تست (نیازمند `termux-api`).
--   **خروجی سازمان‌یافته**: ذخیره لاگ‌ها و بهترین کانفیگ‌ها در مسیر `/sdcard/Download/freenet/`.
+-   **Interactive CLI**: A user-friendly, colored command-line interface.
+-   **Multiple Sources**: Fetch configs from several, selectable mirrors.
+-   **Latency Testing**: Concurrently tests a specified number of configs to find the ones with the lowest latency.
+-   **Top 10 Results**: Automatically saves the top 10 fastest configs to a text file for easy access.
+-   **Android Notifications**: Sends a system notification when the test is complete (requires `termux-api`).
+-   **Organized Output**: Saves logs and the best configs to `/sdcard/Download/freenet/`.
 
-## نصب
+## Installation
 
-۱. **کلون کردن ریپازیتوری**:
-    ```bash
-    curl -sL https://raw.githubusercontent.com/mostafa5804/freenet-termux/main/install.sh | bash
-
-    ```
-
-۲. **اجرای اسکریپت نصب**:
-    به اسکریپت دسترسی اجرایی داده و آن را اجرا کنید. این اسکریپت تمام وابستگی‌ها را نصب می‌کند.
-    ```bash
-    chmod +x install.sh
-    ./install.sh
-    ```
-    مراحل نصب خودکار:
-    - نصب Python، Git و Termux-API.
-    - درخواست دسترسی به حافظه داخلی.
-    - نصب کتابخانه‌های پایتون مورد نیاز.
-    - دانلود و نصب آخرین نسخه Xray-core برای اندروید.
-
-## روش استفاده
-
-پس از نصب موفق، اسکریپت اصلی را اجرا کنید:
+Run the following command in your Termux terminal. It will automatically download the project and install all necessary dependencies, including the Xray-core.
 
 ```bash
-python freenet_termux.py
+curl -sL [https://raw.githubusercontent.com/mostafa5804/freenet-termux/main/install.sh](https://raw.githubusercontent.com/mostafa5804/freenet-termux/main/install.sh) | bash
