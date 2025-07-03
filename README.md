@@ -1,21 +1,34 @@
-# Freenet for Termux
+<p align="center">
+  <a href="https://github.com/mostafa5804/freenet-termux">
+    <img src="https://raw.githubusercontent.com/mostafa5804/freenet-termux/main/freenet.jpg" alt="Freenet for Termux" width="300">
+  </a>
+  <h3 align="center">Freenet برای Termux</h3>
+  <p align="center">
+    ابزاری قدرتمند و آسان برای یافتن سریع‌ترین کانفیگ‌های V2Ray در ترمینال اندروید.
+    <br>
+    <a href="https://github.com/mostafa5804/freenet-termux/issues">گزارش باگ</a>
+    ·
+    <a href="https://github.com/mostafa5804/freenet-termux/pulls">درخواست همکاری</a>
+  </p>
+</p>
 
-A command-line tool for Termux to fetch, test, and find the fastest V2Ray configurations from various public sources.
+<br>
 
-![Screenshot](https://raw.githubusercontent.com/mostafa5804/freenet-termux/main/freenet.jpg)
+## ✨ ویژگی‌های کلیدی
 
-## Features
+-   **🖥️ رابط کاربری خط فرمان (CLI) جذاب و رنگی:** تجربه‌ای لذت‌بخش در ترمینال.
+-   **📡 منابع متنوع کانفیگ:** دریافت کانفیگ از چندین سرور (Mirror) قابل انتخاب.
+-   **⚙️ فیلتر هوشمند:** فیلتر کردن کانفیگ‌ها بر اساس نوع پروتکل (Vmess، Vless و غیره).
+-   **⏱️ تست سرعت (Latency) پیشرفته:** تست همزمان چندین کانفیگ برای یافتن بهترین‌ها.
+-   **🏆 ذخیره نتایج برتر:** ذخیره ۱۰ کانفیگ با کمترین تاخیر به صورت خودکار.
+-   **🔔 اطلاع‌رسانی اندروید:** دریافت اعلان پس از اتمام تست (نیازمند Termux-API).
+-   **📂 خروجی منظم:** ذخیره گزارش‌ها و کانفیگ‌های برتر در پوشه выделенная.
 
--   **Interactive CLI**: A user-friendly, colored command-line interface.
--   **Multiple Sources**: Fetch configs from several, selectable mirrors.
--   **Latency Testing**: Concurrently tests a specified number of configs to find the ones with the lowest latency.
--   **Top 10 Results**: Automatically saves the top 10 fastest configs to a text file for easy access.
--   **Android Notifications**: Sends a system notification when the test is complete (requires `termux-api`).
--   **Organized Output**: Saves logs and the best configs to `/sdcard/Download/freenet/`.
+<br>
 
-## Installation
+## 🚀 نصب و راه‌اندازی آسان
 
-Run the following command in your Termux terminal. It will automatically download the project and install all necessary dependencies, including the Xray-core.
+برای نصب Freenet در ترموکس، دستور زیر را در ترمینال وارد و اجرا کنید:
 
-```bash
+````bash
 curl -sL [https://raw.githubusercontent.com/mostafa5804/freenet-termux/main/install.sh](https://raw.githubusercontent.com/mostafa5804/freenet-termux/main/install.sh) | bash
