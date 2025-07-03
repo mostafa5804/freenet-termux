@@ -13,7 +13,7 @@
 ترمینال ترموکس را باز کنید و دستور زیر را بزنید:
 
 ```
-curl -sL https://raw.githubusercontent.com/username/freenet-termux/main/install.sh | bash
+curl -sL https://raw.githubusercontent.com/mostafa5804/freenet-termux/main/install.sh | bash
 ```
 
 ## 📁 فایل‌های خروجی
