@@ -107,10 +107,16 @@ class ConfigTester:
             return []
 
     def measure_latency(self, config_uri, pbar):
-        socks_port = random.randint(10800, 11800)
+        # ⚠️ FIX: Define latency at the beginning to prevent UnboundLocalError
+        latency = float('inf')
+        xray_process = None
+        temp_config_file = None
+
         try:
+            socks_port = random.randint(10800, 11800)
             config_json = self.parse_protocol(config_uri, socks_port)
             if not config_json:
+                pbar.update(1)
                 return config_uri, float('inf')
 
             rand_suffix = random.randint(1000, 9999)
@@ -127,24 +133,35 @@ class ConfigTester:
             time.sleep(1.5)
 
             proxies = {'http': f'socks5://127.0.0.1:{socks_port}', 'https': f'socks5://127.0.0.1:{socks_port}'}
-            latency = float('inf')
-
+            
             try:
                 start_time = time.perf_counter()
                 response = requests.get(PING_TEST_URL, proxies=proxies, timeout=TEST_TIMEOUT)
                 if response.status_code == 200:
                     latency = (time.perf_counter() - start_time) * 1000
             except requests.RequestException:
+                # Latency remains 'inf' if request fails
                 pass
-            finally:
-                xray_process.terminate()
-                xray_process.wait(timeout=2)
-                os.remove(temp_config_file)
         
-        except Exception:
-            latency = float('inf')
+        except Exception as e:
+            # Any other unexpected error will keep latency as 'inf'
+            pass
         
         finally:
+            if xray_process:
+                try:
+                    xray_process.terminate()
+                    xray_process.wait(timeout=2)
+                except (subprocess.TimeoutExpired, ProcessLookupError):
+                    # In some cases, process might already be dead
+                    pass
+            
+            if temp_config_file and os.path.exists(temp_config_file):
+                try:
+                    os.remove(temp_config_file)
+                except OSError:
+                    pass
+
             pbar.update(1)
             return config_uri, latency
 
