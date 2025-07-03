@@ -45,12 +45,12 @@ curl -sL https://raw.githubusercontent.com/mostafa5804/freenet-termux/main/insta
 
 اگر تمایل دارید مراحل را به صورت دستی کنترل کنید یا در نصب خودکار مشکلی داشتید، از این روش استفاده کنید.
 
-#### ۱. به‌روزرسانی ترموکس:
+#### ۱. به‌روزرسانی ترموکس (اختیاری):
 ```bash
 pkg update && pkg upgrade -y
 ```
 
-#### ۲. نصب Git:
+#### ۲. نصب Git(اختیاری):
 ```bash
 pkg install git -y
 ```
