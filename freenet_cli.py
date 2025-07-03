@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 import os
 import sys
@@ -10,7 +9,6 @@ import requests
 import time
 import datetime
 import random
-import argparse
 import subprocess
 import concurrent.futures
 from pathlib import Path
@@ -18,7 +16,7 @@ from pathlib import Path
 try:
     from colorama import init, Fore, Style
 except ImportError:
-    print("در حال نصب colorama ...")
+    print("Installing colorama...")
     subprocess.run(["pip", "install", "colorama"])
     from colorama import init, Fore, Style
 
@@ -62,7 +60,7 @@ def fetch_configs(url, limit=100):
         r.raise_for_status()
         return [l.strip() for l in r.text.splitlines() if l.strip()][:limit]
     except Exception as e:
-        log(f"{Fore.RED}خطا در دریافت: {e}")
+        log(f"{Fore.RED}Error fetching configs: {e}")
         return []
 
 def generate_qr(uri, index):
@@ -73,37 +71,36 @@ def generate_qr(uri, index):
         img.save(img_path)
         return img_path
     except Exception as e:
-        log(f"{Fore.RED}خطا در ساخت QR: {e}")
+        log(f"{Fore.RED}QR generation error: {e}")
 
 def main():
-    print(f"{Fore.CYAN}📡 FreeNet-Termux Advanced ({TODAY})\n")
+    print(f"{Fore.CYAN}📡 FreeNet-Termux ({TODAY})\n")
 
-    print("📥 انتخاب منبع (mirror):")
+    print("Select config source (mirror):")
     mirrors = list(MIRRORS.keys())
     for i, m in enumerate(mirrors, 1):
         print(f"[{i}] {m}")
-    mirror_idx = input("عدد mirror (1): ").strip()
+    mirror_idx = input("Enter number (default 1): ").strip()
     mirror_key = mirrors[int(mirror_idx)-1] if mirror_idx.isdigit() and 1 <= int(mirror_idx) <= len(mirrors) else mirrors[0]
     url = MIRRORS[mirror_key]
 
-    limit = input("🔢 چند کانفیگ دریافت شود؟ (20): ").strip()
+    limit = input("How many configs to test? (default 20): ").strip()
     limit = int(limit) if limit.isdigit() else 20
 
-    print("\n📡 دریافت کانفیگ‌ها...")
-    configs = fetch_configs(url, limit=limit)
-    print(f"{len(configs)} کانفیگ دریافت شد.")
-
-    print("\n🔍 فیلتر نوع کانفیگ:")
-    print("[1] همه [2] فقط vmess [3] فقط vless [4] فقط trojan")
-    mode = input("انتخاب نوع (1): ").strip()
+    print("\nChoose config type to filter:")
+    print("[1] All [2] Only vmess [3] Only vless [4] Only trojan")
+    mode = input("Your choice (1): ").strip()
     proto_map = {
         "2": ["vmess://"],
         "3": ["vless://"],
         "4": ["trojan://"]
     }
     selected_types = proto_map.get(mode, ["vmess://", "vless://", "trojan://", "ss://"])
+
+    print("\nFetching configs...")
+    configs = fetch_configs(url, limit=limit)
     configs = filter_by_protocol(configs, selected_types)
-    print(f"{len(configs)} کانفیگ پس از فیلتر. در حال تست...\n")
+    print(f"Total configs after filter: {len(configs)}\n")
 
     working = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
@@ -117,7 +114,7 @@ def main():
                 print(f"{Fore.RED}❌ {i}. Failed")
 
     working.sort(key=lambda x: x[1])
-    print(f"\n{Fore.YELLOW}🔝 بهترین کانفیگ‌ها:")
+    print(f"\n{Fore.YELLOW}Top 5 configs:")
     for i, (cfg, lat) in enumerate(working[:5], 1):
         print(f"{Fore.CYAN}{i}. {cfg[:80]}... ({lat:.1f}ms)")
         generate_qr(cfg, i)
@@ -136,8 +133,8 @@ def main():
             if p.exists():
                 z.write(p, arcname=f"qr_{i}.png")
 
-    print(f"\n📦 فایل خروجی ZIP: {zipname}")
-    subprocess.run(["termux-notification", "--title", "FreeNet", "--content", "تست کانفیگ‌ها تمام شد ✅"])
+    print(f"\n{Fore.GREEN}Results saved to ZIP: {zipname}")
+    subprocess.run(["termux-notification", "--title", "FreeNet", "--content", "Test completed successfully ✅"])
     subprocess.run(["termux-open", str(zipname)])
 
 if __name__ == "__main__":
