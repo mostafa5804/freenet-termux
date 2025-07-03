@@ -122,84 +122,230 @@ class ConfigTester:
                 return port
         return random.randint(10800, 11800) # Fallback
 
-    # --- Start of Parsers from freenet.py ---
+    # --- Start of Parsers (Corrected and Adapted) ---
     def vmess_to_json(self, vmess_url, port):
-        # This parser is from the original freenet.py
+        if not vmess_url.startswith("vmess://"):
+            raise ValueError("Invalid VMess URL format")
+        
         base64_str = vmess_url[8:]
         padded = base64_str + '=' * (4 - len(base64_str) % 4)
-        decoded = json.loads(base64.urlsafe_b64decode(padded).decode('utf-8'))
+        decoded_bytes = base64.urlsafe_b64decode(padded)
+        decoded_str = decoded_bytes.decode('utf-8')
+        vmess_config = json.loads(decoded_str)
         
-        config = {
-            "inbounds": [{"port": port, "listen": "127.0.0.1", "protocol": "socks", "settings": {"udp": True}}],
+        xray_config = {
+            "inbounds": [{
+                "port": port,
+                "listen": "127.0.0.1",
+                "protocol": "socks",
+                "settings": {"udp": True}
+            }],
             "outbounds": [{
                 "protocol": "vmess",
-                "settings": {"vnext": [{"address": decoded["add"], "port": int(decoded["port"]), "users": [{"id": decoded["id"], "alterId": int(decoded.get("aid", 0)), "security": decoded.get("scy", "auto")}]}]},
+                "settings": {
+                    "vnext": [{
+                        "address": vmess_config["add"],
+                        "port": int(vmess_config["port"]),
+                        "users": [{
+                            "id": vmess_config["id"],
+                            "alterId": int(vmess_config.get("aid", 0)),
+                            "security": vmess_config.get("scy", "auto")
+                        }]
+                    }]
+                },
                 "streamSettings": {
-                    "network": decoded.get("net", "tcp"),
-                    "security": decoded.get("tls", ""),
-                    "wsSettings": {"path": decoded.get("path", "/"), "headers": {"Host": decoded.get("host", "")}} if decoded.get("net") == "ws" else {},
-                    "tcpSettings": {"header": {"type": decoded.get("type", "none")}} if decoded.get("net") == "tcp" else {}
+                    "network": vmess_config.get("net", "tcp"),
+                    "security": vmess_config.get("tls", ""),
+                    "tcpSettings": {
+                        "header": {
+                            "type": vmess_config.get("type", "none"),
+                            "request": {
+                                "path": [vmess_config.get("path", "/")],
+                                "headers": {
+                                    "Host": [vmess_config.get("host", "")]
+                                }
+                            }
+                        }
+                    } if vmess_config.get("net") == "tcp" and vmess_config.get("type") == "http" else None
                 }
             }]
         }
-        return config
+        
+        if not xray_config["outbounds"][0]["streamSettings"]["security"]:
+            del xray_config["outbounds"][0]["streamSettings"]["security"]
+        if not xray_config["outbounds"][0]["streamSettings"].get("tcpSettings"):
+            xray_config["outbounds"][0]["streamSettings"].pop("tcpSettings", None)
+        
+        return xray_config
 
     def parse_vless(self, uri, port):
-        # This parser is from the original freenet.py
         parsed = urllib.parse.urlparse(uri)
-        params = parse_qs(parsed.query)
         config = {
-            "inbounds": [{"port": port, "listen": "127.0.0.1", "protocol": "socks", "settings": {"udp": True}}],
+            "inbounds": [{
+                "port": port,
+                "listen": "127.0.0.1",
+                "protocol": "socks",
+                "settings": {"udp": True}
+            }],
             "outbounds": [{
                 "protocol": "vless",
-                "settings": {"vnext": [{"address": parsed.hostname, "port": parsed.port, "users": [{"id": parsed.username, "encryption": params.get("encryption", ["none"])[0]}]}]},
+                "settings": {
+                    "vnext": [{
+                        "address": parsed.hostname,
+                        "port": parsed.port,
+                        "users": [{
+                            "id": parsed.username,
+                            "encryption": parse_qs(parsed.query).get("encryption", ["none"])[0]
+                        }]
+                    }]
+                },
                 "streamSettings": {
-                    "network": params.get("type", ["tcp"])[0],
-                    "security": params.get("security", ["none"])[0],
-                    "realitySettings": {"publicKey": params.get("pbk", [""])[0], "shortId": params.get("sid", [""])[0], "serverName": params.get("sni", [""])[0]} if params.get("security") == ["reality"] else {},
-                    "wsSettings": {"path": params.get("path", ["/"])[0], "headers": {"Host": params.get("host", [""])[0]}} if params.get("type") == ["ws"] else {}
+                    "network": parse_qs(parsed.query).get("type", ["tcp"])[0],
+                    "security": parse_qs(parsed.query).get("security", ["none"])[0]
                 }
-            }]
-        }
-        return config
-
-    def parse_trojan(self, uri, port):
-        # This parser is from the original freenet.py
-        parsed = urllib.parse.urlparse(uri)
-        params = parse_qs(parsed.query)
-        config = {
-            "inbounds": [{"port": port, "listen": "127.0.0.1", "protocol": "socks", "settings": {"udp": True}}],
-            "outbounds": [{
-                "protocol": "trojan",
-                "settings": {"servers": [{"address": parsed.hostname, "port": parsed.port, "password": parsed.username}]},
-                "streamSettings": {"network": params.get("type", ["tcp"])[0], "security": params.get("security", ["none"])[0]}
             }]
         }
         return config
 
     def parse_shadowsocks(self, uri, port):
-        # This parser is from the original freenet.py
-        if not uri.startswith("ss://"): raise ValueError("Invalid SS URI")
-        parts = uri[5:].split("#", 1)[0]
-        if "@" in parts:
-            encoded_part, server_part = parts.split("@", 1)
+        if not uri.startswith("ss://"):
+            raise ValueError("Invalid Shadowsocks URI")
+        
+        parts = uri[5:].split("#", 1)
+        encoded_part = parts[0]
+        remark = urllib.parse.unquote(parts[1]) if len(parts) > 1 else "Imported Shadowsocks"
+
+        if "@" in encoded_part:
+            userinfo, server_part = encoded_part.split("@", 1)
         else:
-            encoded_part = parts
-            server_part = ""
+            decoded = base64.b64decode(encoded_part + '=' * (-len(encoded_part) % 4)).decode('utf-8')
+            if "@" in decoded:
+                userinfo, server_part = decoded.split("@", 1)
+            else:
+                userinfo = decoded
+                server_part = ""
+
+        if ":" in server_part:
+            server, port_num = server_part.rsplit(":", 1)
+            port_num = int(port_num)
+        else:
+            server = server_part
+            port_num = 443
 
         try:
-            decoded = base64.urlsafe_b64decode(encoded_part + '=' * (-len(encoded_part) % 4)).decode('utf-8')
-            method, password = decoded.split(":", 1)
-        except Exception:
-            return None # Unsupported SS format
+            decoded_userinfo = base64.b64decode(userinfo + '=' * (-len(userinfo) % 4)).decode('utf-8')
+        except:
+            decoded_userinfo = base64.b64decode(encoded_part + '=' * (-len(encoded_part) % 4)).decode('utf-8')
+            if "@" in decoded_userinfo:
+                userinfo_part, server_part = decoded_userinfo.split("@", 1)
+                if ":" in server_part:
+                    server, port_num = server_part.rsplit(":", 1)
+                    port_num = int(port_num)
+                decoded_userinfo = userinfo_part
 
-        server, port_str = server_part.split(":", 1)
+        if ":" not in decoded_userinfo:
+            raise ValueError("Invalid Shadowsocks URI")
+        
+        method, password = decoded_userinfo.split(":", 1)
+
         config = {
-            "inbounds": [{"port": port, "listen": "127.0.0.1", "protocol": "socks", "settings": {"udp": True}}],
-            "outbounds": [{"protocol": "shadowsocks", "settings": {"servers": [{"address": server, "port": int(port_str), "method": method, "password": password}]}}]
+            "inbounds": [{
+                "port": port,
+                "listen": "127.0.0.1",
+                "protocol": "socks",
+                "settings": {"udp": True}
+            }],
+            "outbounds": [
+                {
+                    "protocol": "shadowsocks",
+                    "settings": {
+                        "servers": [{
+                            "address": server,
+                            "port": port_num,
+                            "method": method,
+                            "password": password
+                        }]
+                    },
+                    "tag": "proxy"
+                },
+                {
+                    "protocol": "freedom",
+                    "tag": "direct"
+                }
+            ],
+            "routing": {
+                "domainStrategy": "IPOnDemand",
+                "rules": [{
+                    "type": "field",
+                    "ip": ["geoip:private"],
+                    "outboundTag": "direct"
+                }]
+            }
         }
+        
         return config
-    
+
+    def parse_trojan(self, uri, port):
+        if not uri.startswith("trojan://"):
+            raise ValueError("Invalid Trojan URI")
+        
+        parsed = urllib.parse.urlparse(uri)
+        password = parsed.username
+        server = parsed.hostname
+        port_num = parsed.port
+        query = parse_qs(parsed.query)
+        remark = urllib.parse.unquote(parsed.fragment) if parsed.fragment else "Imported Trojan"
+        
+        config = {
+            "inbounds": [{
+                "port": port,
+                "listen": "127.0.0.1",
+                "protocol": "socks",
+                "settings": {"udp": True}
+            }],
+            "outbounds": [
+                {
+                    "protocol": "trojan",
+                    "settings": {
+                        "servers": [{
+                            "address": server,
+                            "port": port_num,
+                            "password": password
+                        }]
+                    },
+                    "streamSettings": {
+                        "network": query.get("type", ["tcp"])[0],
+                        "security": "tls",
+                        "tcpSettings": {
+                            "header": {
+                                "type": query.get("headerType", ["none"])[0],
+                                "request": {
+                                    "headers": {
+                                        "Host": [query.get("host", [""])[0]]
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "tag": "proxy"
+                },
+                {
+                    "protocol": "freedom",
+                    "tag": "direct"
+                }
+            ],
+            "routing": {
+                "domainStrategy": "IPOnDemand",
+                "rules": [{
+                    "type": "field",
+                    "ip": ["geoip:private"],
+                    "outboundTag": "direct"
+                }]
+            }
+        }
+        
+        return config
+
     def parse_protocol(self, uri, port):
         try:
             if uri.startswith("vmess://"):
@@ -211,8 +357,8 @@ class ConfigTester:
             elif uri.startswith("trojan://"):
                 return self.parse_trojan(uri, port)
         except Exception:
-            return None
-        return None
+            return None # Return None on any parsing error
+        return None # Return None for unsupported protocols
     # --- End of Parsers ---
 
     def measure_latency(self, config_uri):
@@ -288,19 +434,24 @@ def display_menu():
 def get_user_choices():
     # 1. Select Mirror
     print(f"\n{Colors.CYAN}--- Select a Mirror ---{Colors.RESET}")
-    for i, name in enumerate(MIRRORS.keys(), 1):
+    mirror_keys = list(MIRRORS.keys())
+    for i, name in enumerate(mirror_keys, 1):
         print(f"{Colors.YELLOW}{i}.{Colors.WHITE} {name}")
     
     mirror_choice = 0
     while mirror_choice not in range(1, len(MIRRORS) + 1):
         try:
-            choice = int(input(f"{Colors.CYAN}Select a mirror (1-{len(MIRRORS)}): {Colors.RESET}"))
-            if 1 <= choice <= len(MIRRORS):
-                mirror_choice = choice
+            choice_str = input(f"{Colors.CYAN}Select a mirror (1-{len(MIRRORS)}): {Colors.RESET}")
+            if choice_str:
+                choice = int(choice_str)
+                if 1 <= choice <= len(MIRRORS):
+                    mirror_choice = choice
+            else:
+                print(f"{Colors.RED}Please enter a number.{Colors.RESET}")
         except ValueError:
-            print(f"{Colors.RED}Please enter a number.{Colors.RESET}")
+            print(f"{Colors.RED}Please enter a valid number.{Colors.RESET}")
     
-    selected_mirror_url = list(MIRRORS.values())[mirror_choice - 1]
+    selected_mirror_url = MIRRORS[mirror_keys[mirror_choice - 1]]
 
     # 2. Select Protocol
     print(f"\n{Colors.CYAN}--- Filter by Protocol Type ---{Colors.RESET}")
@@ -311,11 +462,15 @@ def get_user_choices():
     protocol_choice = 0
     while protocol_choice not in range(1, len(protocols) + 1):
         try:
-            choice = int(input(f"{Colors.CYAN}Select protocol type (1-{len(protocols)}): {Colors.RESET}"))
+            choice_str = input(f"{Colors.CYAN}Select protocol type (1-{len(protocols)}, default is All): {Colors.RESET}")
+            if not choice_str:
+                protocol_choice = 1 # Default to All
+                break
+            choice = int(choice_str)
             if 1 <= choice <= len(protocols):
                 protocol_choice = choice
         except ValueError:
-            print(f"{Colors.RED}Please enter a number.{Colors.RESET}")
+            print(f"{Colors.RED}Please enter a valid number.{Colors.RESET}")
 
     selected_protocol = protocols[protocol_choice - 1]
 
@@ -328,13 +483,15 @@ def get_user_choices():
     thread_count_choice = 0
     while thread_count_choice not in range(1, len(thread_options) + 1):
         try:
-            choice = int(input(f"{Colors.CYAN}Select thread count (1-{len(thread_options)}), default is 100: {Colors.RESET}" or "4"))
+            choice_str = input(f"{Colors.CYAN}Select thread count (1-{len(thread_options)}), default is 100: {Colors.RESET}")
+            if not choice_str:
+                thread_count_choice = 4 # Default to 100
+                break
+            choice = int(choice_str)
             if 1 <= choice <= len(thread_options):
                 thread_count_choice = choice
-            else:
-                thread_count_choice = 4 # Default to 100
         except ValueError:
-            thread_count_choice = 4 # Default to 100
+            print(f"{Colors.RED}Please enter a valid number.{Colors.RESET}")
             
     selected_threads = thread_options[thread_count_choice - 1]
 
@@ -343,11 +500,15 @@ def get_user_choices():
     num_to_test = 0
     while num_to_test <= 0:
         try:
-            num = int(input(f"{Colors.CYAN}How many configs should be tested? (e.g., 50): {Colors.RESET}"))
-            if num > 0:
-                num_to_test = num
+            num_str = input(f"{Colors.CYAN}How many configs should be tested? (e.g., 50): {Colors.RESET}")
+            if num_str:
+                num = int(num_str)
+                if num > 0:
+                    num_to_test = num
+            else:
+                print(f"{Colors.RED}Please enter a number.{Colors.RESET}")
         except ValueError:
-            print(f"{Colors.RED}Please enter a number.{Colors.RESET}")
+            print(f"{Colors.RED}Please enter a valid number.{Colors.RESET}")
 
     return selected_mirror_url, selected_protocol, num_to_test, selected_threads
 
@@ -435,6 +596,16 @@ def main():
         print(f"{Colors.RED}Error: Xray executable not found at {XRAY_PATH}{Colors.RESET}")
         print(f"{Colors.YELLOW}Please run the installer or place 'xray' in the script directory.{Colors.RESET}")
         sys.exit(1)
+    
+    # Check for execute permissions and set them if not present
+    if not os.access(XRAY_PATH, os.X_OK):
+        print(f"{Colors.YELLOW}Xray executable not found or not executable. Attempting to set permissions...{Colors.RESET}")
+        try:
+            os.chmod(XRAY_PATH, 0o755)
+            log("Set execute permission for Xray.", Colors.CYAN)
+        except Exception as e:
+            print(f"{Colors.RED}Failed to set execute permission: {e}{Colors.RESET}")
+            sys.exit(1)
 
     setup_environment()
     
