@@ -26,7 +26,7 @@ class Colors:
     WHITE = '\033[97m'
     RESET = '\033[0m'
 
-# --- Configuration (Matched with freenet.py) ---
+# --- Configuration ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.expanduser('~/storage/shared/Download/freenet')
 XRAY_PATH = os.path.join(BASE_DIR, "xray")
@@ -35,9 +35,14 @@ TEMP_FOLDER = os.path.join(BASE_DIR, "temp")
 BEST_CONFIGS_FILE = os.path.join(OUTPUT_DIR, "best_configs.txt")
 LOG_FILE = os.path.join(OUTPUT_DIR, "log.txt")
 
-# --- Settings from freenet.py ---
-PING_TEST_URL = "https://old-queen-f906.mynameissajjad.workers.dev/login"
-TEST_TIMEOUT = 4  # The actual timeout used in the original script's request
+# --- Settings ---
+PING_TEST_URLS = [
+    "https://www.google.com",
+    "https://cloudflare.com",
+    "https://old-queen-f906.mynameissajjad.workers.dev/login"
+]
+TEST_TIMEOUT = 4
+SOCKS_PORT = 1080
 
 MIRRORS = {
     "barry-far": "https://raw.githubusercontent.com/barry-far/V2ray-Config/refs/heads/main/All_Configs_Sub.txt",
@@ -102,13 +107,14 @@ class ConfigTester:
             response.encoding = 'utf-8'
             configs = [line.strip() for line in response.text.splitlines() if line.strip()]
             log(f"Successfully fetched {len(configs)} configs.", Colors.GREEN)
-            return configs[::-1] # Reverse the list to match freenet.py
+            return configs[::-1]  # Reverse the list to match freenet.py
         except requests.RequestException as e:
             log(f"Error fetching configs: {e}", Colors.RED)
             return []
 
     def is_port_available(self, port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.5)
             try:
                 s.bind(('127.0.0.1', port))
                 return True
@@ -116,237 +122,216 @@ class ConfigTester:
                 return False
 
     def get_available_port(self):
-        for _ in range(10): # Try 10 times to find a random port
+        # First try the default SOCKS port
+        if self.is_port_available(SOCKS_PORT):
+            return SOCKS_PORT
+        
+        # Then try random ports
+        for _ in range(10):
             port = random.randint(49152, 65535)
             if self.is_port_available(port):
                 return port
-        return random.randint(10800, 11800) # Fallback
+        return random.randint(10000, 20000)  # Fallback
 
-    # --- Start of Parsers (Corrected and Adapted) ---
+    # --- Improved Parsers ---
     def vmess_to_json(self, vmess_url, port):
-        if not vmess_url.startswith("vmess://"):
-            raise ValueError("Invalid VMess URL format")
-        
-        base64_str = vmess_url[8:]
-        padded = base64_str + '=' * (4 - len(base64_str) % 4)
-        decoded_bytes = base64.urlsafe_b64decode(padded)
-        decoded_str = decoded_bytes.decode('utf-8')
-        vmess_config = json.loads(decoded_str)
-        
-        xray_config = {
-            "inbounds": [{
-                "port": port,
-                "listen": "127.0.0.1",
-                "protocol": "socks",
-                "settings": {"udp": True}
-            }],
-            "outbounds": [{
-                "protocol": "vmess",
-                "settings": {
-                    "vnext": [{
-                        "address": vmess_config["add"],
-                        "port": int(vmess_config["port"]),
-                        "users": [{
-                            "id": vmess_config["id"],
-                            "alterId": int(vmess_config.get("aid", 0)),
-                            "security": vmess_config.get("scy", "auto")
+        try:
+            base64_str = vmess_url[8:]
+            padded = base64_str + '=' * (4 - len(base64_str) % 4)
+            decoded_bytes = base64.urlsafe_b64decode(padded)
+            decoded_str = decoded_bytes.decode('utf-8')
+            vmess_config = json.loads(decoded_str)
+            
+            config = {
+                "inbounds": [{
+                    "port": port,
+                    "listen": "127.0.0.1",
+                    "protocol": "socks",
+                    "settings": {"udp": True}
+                }],
+                "outbounds": [{
+                    "protocol": "vmess",
+                    "settings": {
+                        "vnext": [{
+                            "address": vmess_config["add"],
+                            "port": int(vmess_config["port"]),
+                            "users": [{
+                                "id": vmess_config["id"],
+                                "alterId": int(vmess_config.get("aid", 0)),
+                                "security": vmess_config.get("scy", "auto")
+                            }]
                         }]
-                    }]
-                },
-                "streamSettings": {
-                    "network": vmess_config.get("net", "tcp"),
-                    "security": vmess_config.get("tls", ""),
-                    "tcpSettings": {
-                        "header": {
-                            "type": vmess_config.get("type", "none"),
-                            "request": {
-                                "path": [vmess_config.get("path", "/")],
-                                "headers": {
-                                    "Host": [vmess_config.get("host", "")]
-                                }
-                            }
-                        }
-                    } if vmess_config.get("net") == "tcp" and vmess_config.get("type") == "http" else None
-                }
-            }]
-        }
-        
-        if not xray_config["outbounds"][0]["streamSettings"]["security"]:
-            del xray_config["outbounds"][0]["streamSettings"]["security"]
-        if not xray_config["outbounds"][0]["streamSettings"].get("tcpSettings"):
-            xray_config["outbounds"][0]["streamSettings"].pop("tcpSettings", None)
-        
-        return xray_config
+                    },
+                    "streamSettings": {
+                        "network": vmess_config.get("net", "tcp"),
+                        "security": vmess_config.get("tls", ""),
+                        "wsSettings": {
+                            "path": vmess_config.get("path", "/"),
+                            "headers": {"Host": vmess_config.get("host", "")}
+                        } if vmess_config.get("net") == "ws" else None,
+                        "tcpSettings": {
+                            "header": {"type": vmess_config.get("type", "none")}
+                        } if vmess_config.get("net") == "tcp" else None
+                    }
+                }]
+            }
+            
+            # Remove None values
+            if config["outbounds"][0]["streamSettings"]["wsSettings"] is None:
+                del config["outbounds"][0]["streamSettings"]["wsSettings"]
+            if config["outbounds"][0]["streamSettings"]["tcpSettings"] is None:
+                del config["outbounds"][0]["streamSettings"]["tcpSettings"]
+                
+            return config
+        except Exception as e:
+            log(f"Error parsing VMess: {str(e)}", Colors.RED)
+            return None
 
     def parse_vless(self, uri, port):
-        parsed = urllib.parse.urlparse(uri)
-        config = {
-            "inbounds": [{
-                "port": port,
-                "listen": "127.0.0.1",
-                "protocol": "socks",
-                "settings": {"udp": True}
-            }],
-            "outbounds": [{
-                "protocol": "vless",
-                "settings": {
-                    "vnext": [{
-                        "address": parsed.hostname,
-                        "port": parsed.port,
-                        "users": [{
-                            "id": parsed.username,
-                            "encryption": parse_qs(parsed.query).get("encryption", ["none"])[0]
+        try:
+            parsed = urllib.parse.urlparse(uri)
+            params = parse_qs(parsed.query)
+            
+            config = {
+                "inbounds": [{
+                    "port": port,
+                    "listen": "127.0.0.1",
+                    "protocol": "socks",
+                    "settings": {"udp": True}
+                }],
+                "outbounds": [{
+                    "protocol": "vless",
+                    "settings": {
+                        "vnext": [{
+                            "address": parsed.hostname,
+                            "port": parsed.port,
+                            "users": [{
+                                "id": parsed.username,
+                                "encryption": params.get("encryption", ["none"])[0]
+                            }]
                         }]
-                    }]
-                },
-                "streamSettings": {
-                    "network": parse_qs(parsed.query).get("type", ["tcp"])[0],
-                    "security": parse_qs(parsed.query).get("security", ["none"])[0]
-                }
-            }]
-        }
-        return config
+                    },
+                    "streamSettings": {
+                        "network": params.get("type", ["tcp"])[0],
+                        "security": params.get("security", ["none"])[0],
+                        "wsSettings": {
+                            "path": params.get("path", ["/"])[0],
+                            "headers": {"Host": params.get("host", [""])[0]}
+                        } if params.get("type")[0] == "ws" else None
+                    }
+                }]
+            }
+            return config
+        except Exception as e:
+            log(f"Error parsing VLESS: {str(e)}", Colors.RED)
+            return None
+
+    def parse_trojan(self, uri, port):
+        try:
+            parsed = urllib.parse.urlparse(uri)
+            params = parse_qs(parsed.query)
+            
+            config = {
+                "inbounds": [{
+                    "port": port,
+                    "listen": "127.0.0.1",
+                    "protocol": "socks",
+                    "settings": {"udp": True}
+                }],
+                "outbounds": [{
+                    "protocol": "trojan",
+                    "settings": {
+                        "servers": [{
+                            "address": parsed.hostname,
+                            "port": parsed.port,
+                            "password": parsed.username
+                        }]
+                    },
+                    "streamSettings": {
+                        "network": params.get("type", ["tcp"])[0],
+                        "security": params.get("security", ["tls"])[0],
+                        "wsSettings": {
+                            "path": params.get("path", ["/"])[0],
+                            "headers": {"Host": params.get("host", [""])[0]}
+                        } if params.get("type")[0] == "ws" else None
+                    }
+                }]
+            }
+            return config
+        except Exception as e:
+            log(f"Error parsing Trojan: {str(e)}", Colors.RED)
+            return None
 
     def parse_shadowsocks(self, uri, port):
-        if not uri.startswith("ss://"):
-            raise ValueError("Invalid Shadowsocks URI")
-        
-        parts = uri[5:].split("#", 1)
-        encoded_part = parts[0]
-        remark = urllib.parse.unquote(parts[1]) if len(parts) > 1 else "Imported Shadowsocks"
-
-        if "@" in encoded_part:
-            userinfo, server_part = encoded_part.split("@", 1)
-        else:
-            decoded = base64.b64decode(encoded_part + '=' * (-len(encoded_part) % 4)).decode('utf-8')
-            if "@" in decoded:
-                userinfo, server_part = decoded.split("@", 1)
-            else:
-                userinfo = decoded
-                server_part = ""
-
-        if ":" in server_part:
-            server, port_num = server_part.rsplit(":", 1)
-            port_num = int(port_num)
-        else:
-            server = server_part
-            port_num = 443
-
         try:
-            decoded_userinfo = base64.b64decode(userinfo + '=' * (-len(userinfo) % 4)).decode('utf-8')
-        except:
-            decoded_userinfo = base64.b64decode(encoded_part + '=' * (-len(encoded_part) % 4)).decode('utf-8')
-            if "@" in decoded_userinfo:
-                userinfo_part, server_part = decoded_userinfo.split("@", 1)
-                if ":" in server_part:
-                    server, port_num = server_part.rsplit(":", 1)
-                    port_num = int(port_num)
-                decoded_userinfo = userinfo_part
-
-        if ":" not in decoded_userinfo:
-            raise ValueError("Invalid Shadowsocks URI")
-        
-        method, password = decoded_userinfo.split(":", 1)
-
-        config = {
-            "inbounds": [{
-                "port": port,
-                "listen": "127.0.0.1",
-                "protocol": "socks",
-                "settings": {"udp": True}
-            }],
-            "outbounds": [
-                {
+            if not uri.startswith("ss://"):
+                raise ValueError("Invalid Shadowsocks URI")
+            
+            # Extract the main part before fragment
+            base_uri = uri.split('#')[0][5:]
+            
+            # Handle different formats
+            if '@' in base_uri:
+                userinfo, serverinfo = base_uri.split('@', 1)
+            else:
+                # Try decoding base64
+                try:
+                    decoded = base64.urlsafe_b64decode(base_uri + '=' * (-len(base_uri) % 4)).decode('utf-8')
+                    if '@' in decoded:
+                        userinfo, serverinfo = decoded.split('@', 1)
+                    else:
+                        userinfo = decoded
+                        serverinfo = ""
+                except:
+                    userinfo = base_uri
+                    serverinfo = ""
+            
+            # Parse server info
+            if ':' in serverinfo:
+                server, port_str = serverinfo.rsplit(':', 1)
+                server_port = int(port_str)
+            else:
+                server = serverinfo
+                server_port = 443
+                
+            # Parse user info
+            if ':' in userinfo:
+                method, password = userinfo.split(':', 1)
+            else:
+                # Try decoding if it looks like base64
+                try:
+                    decoded_user = base64.urlsafe_b64decode(userinfo + '=' * (-len(userinfo) % 4)).decode('utf-8')
+                    method, password = decoded_user.split(':', 1)
+                except:
+                    method = "aes-256-gcm"
+                    password = userinfo
+            
+            config = {
+                "inbounds": [{
+                    "port": port,
+                    "listen": "127.0.0.1",
+                    "protocol": "socks",
+                    "settings": {"udp": True}
+                }],
+                "outbounds": [{
                     "protocol": "shadowsocks",
                     "settings": {
                         "servers": [{
                             "address": server,
-                            "port": port_num,
+                            "port": server_port,
                             "method": method,
                             "password": password
                         }]
-                    },
-                    "tag": "proxy"
-                },
-                {
-                    "protocol": "freedom",
-                    "tag": "direct"
-                }
-            ],
-            "routing": {
-                "domainStrategy": "IPOnDemand",
-                "rules": [{
-                    "type": "field",
-                    "ip": ["geoip:private"],
-                    "outboundTag": "direct"
+                    }
                 }]
             }
-        }
-        
-        return config
-
-    def parse_trojan(self, uri, port):
-        if not uri.startswith("trojan://"):
-            raise ValueError("Invalid Trojan URI")
-        
-        parsed = urllib.parse.urlparse(uri)
-        password = parsed.username
-        server = parsed.hostname
-        port_num = parsed.port
-        query = parse_qs(parsed.query)
-        remark = urllib.parse.unquote(parsed.fragment) if parsed.fragment else "Imported Trojan"
-        
-        config = {
-            "inbounds": [{
-                "port": port,
-                "listen": "127.0.0.1",
-                "protocol": "socks",
-                "settings": {"udp": True}
-            }],
-            "outbounds": [
-                {
-                    "protocol": "trojan",
-                    "settings": {
-                        "servers": [{
-                            "address": server,
-                            "port": port_num,
-                            "password": password
-                        }]
-                    },
-                    "streamSettings": {
-                        "network": query.get("type", ["tcp"])[0],
-                        "security": "tls",
-                        "tcpSettings": {
-                            "header": {
-                                "type": query.get("headerType", ["none"])[0],
-                                "request": {
-                                    "headers": {
-                                        "Host": [query.get("host", [""])[0]]
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "tag": "proxy"
-                },
-                {
-                    "protocol": "freedom",
-                    "tag": "direct"
-                }
-            ],
-            "routing": {
-                "domainStrategy": "IPOnDemand",
-                "rules": [{
-                    "type": "field",
-                    "ip": ["geoip:private"],
-                    "outboundTag": "direct"
-                }]
-            }
-        }
-        
-        return config
-
+            return config
+        except Exception as e:
+            log(f"Error parsing Shadowsocks: {str(e)}", Colors.RED)
+            return None
+    
     def parse_protocol(self, uri, port):
+        uri = uri.strip()
         try:
             if uri.startswith("vmess://"):
                 return self.vmess_to_json(uri, port)
@@ -356,10 +341,20 @@ class ConfigTester:
                 return self.parse_shadowsocks(uri, port)
             elif uri.startswith("trojan://"):
                 return self.parse_trojan(uri, port)
-        except Exception:
-            return None # Return None on any parsing error
-        return None # Return None for unsupported protocols
-    # --- End of Parsers ---
+        except Exception as e:
+            log(f"General parser error for {uri[:30]}...: {str(e)}", Colors.RED)
+        return None
+
+    def wait_for_port(self, port, timeout=10):
+        """Wait until the specified port is open"""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                if s.connect_ex(('127.0.0.1', port)) == 0:
+                    return True
+            time.sleep(0.5)
+        return False
 
     def measure_latency(self, config_uri):
         if self.stop_event.is_set():
@@ -370,47 +365,77 @@ class ConfigTester:
         temp_config_file = None
         
         try:
+            # Get an available port
             socks_port = self.get_available_port()
-            config = self.parse_protocol(config_uri, socks_port)
+            log(f"Testing config on port: {socks_port}", Colors.BLUE)
             
+            # Parse config
+            config = self.parse_protocol(config_uri, socks_port)
             if not config:
                 return config_uri, float('inf')
 
+            # Create temp config file
             rand_suffix = random.randint(1000, 9999)
             temp_config_file = os.path.join(TEMP_FOLDER, f"temp_config_{rand_suffix}.json")
-
+            
             with open(temp_config_file, "w", encoding='utf-8') as f:
-                json.dump(config, f)
+                json.dump(config, f, indent=2)
 
+            # Start Xray
             xray_process = subprocess.Popen(
                 [XRAY_PATH, "run", "-config", temp_config_file],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
             )
             
-            time.sleep(1) # Give Xray time to start
-
-            proxies = {'http': f'socks5://127.0.0.1:{socks_port}', 'https': f'socks5://127.0.0.1:{socks_port}'}
-            headers = {'Cache-Control': 'no-cache', 'Connection': 'close'}
-
-            try:
-                start_time = time.perf_counter()
-                response = requests.get(PING_TEST_URL, proxies=proxies, timeout=TEST_TIMEOUT, headers=headers)
-                if response.status_code == 200:
-                    latency = (time.perf_counter() - start_time) * 1000
-            except requests.RequestException:
-                pass # Latency remains 'inf'
+            # Wait for port to be ready
+            if not self.wait_for_port(socks_port):
+                log(f"Port {socks_port} not ready for {config_uri[:30]}...", Colors.YELLOW)
+                return config_uri, float('inf')
+            
+            # Test connection
+            proxies = {
+                'http': f'socks5://127.0.0.1:{socks_port}',
+                'https': f'socks5://127.0.0.1:{socks_port}'
+            }
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Connection': 'close'
+            }
+            
+            # Try multiple test URLs
+            for test_url in PING_TEST_URLS:
+                try:
+                    start_time = time.perf_counter()
+                    response = requests.get(
+                        test_url,
+                        proxies=proxies,
+                        timeout=TEST_TIMEOUT,
+                        headers=headers,
+                        verify=False  # Skip SSL verification for better compatibility
+                    )
+                    if response.status_code in [200, 301, 302]:
+                        latency = (time.perf_counter() - start_time) * 1000
+                        break
+                except requests.RequestException:
+                    continue
         
-        except Exception:
-            pass # Latency remains 'inf'
+        except Exception as e:
+            log(f"Critical error in latency test: {str(e)}", Colors.RED)
         
         finally:
+            # Clean up
             if xray_process:
                 try:
                     xray_process.terminate()
                     xray_process.wait(timeout=2)
                 except (subprocess.TimeoutExpired, ProcessLookupError):
-                    xray_process.kill()
+                    try:
+                        xray_process.kill()
+                    except:
+                        pass
 
             if temp_config_file and os.path.exists(temp_config_file):
                 try:
@@ -418,7 +443,7 @@ class ConfigTester:
                 except OSError:
                     pass
             
-            time.sleep(0.1)
+            time.sleep(0.2)  # Short cooldown
             return config_uri, latency
 
 # --- CLI Interface ---
@@ -434,24 +459,20 @@ def display_menu():
 def get_user_choices():
     # 1. Select Mirror
     print(f"\n{Colors.CYAN}--- Select a Mirror ---{Colors.RESET}")
-    mirror_keys = list(MIRRORS.keys())
-    for i, name in enumerate(mirror_keys, 1):
+    for i, name in enumerate(MIRRORS.keys(), 1):
         print(f"{Colors.YELLOW}{i}.{Colors.WHITE} {name}")
     
     mirror_choice = 0
     while mirror_choice not in range(1, len(MIRRORS) + 1):
         try:
-            choice_str = input(f"{Colors.CYAN}Select a mirror (1-{len(MIRRORS)}): {Colors.RESET}")
-            if choice_str:
-                choice = int(choice_str)
-                if 1 <= choice <= len(MIRRORS):
-                    mirror_choice = choice
-            else:
-                print(f"{Colors.RED}Please enter a number.{Colors.RESET}")
+            choice = input(f"{Colors.CYAN}Select a mirror (1-{len(MIRRORS)}, default=1): {Colors.RESET}") or "1"
+            mirror_choice = int(choice)
+            if not 1 <= mirror_choice <= len(MIRRORS):
+                mirror_choice = 1
         except ValueError:
-            print(f"{Colors.RED}Please enter a valid number.{Colors.RESET}")
+            mirror_choice = 1
     
-    selected_mirror_url = MIRRORS[mirror_keys[mirror_choice - 1]]
+    selected_mirror_url = list(MIRRORS.values())[mirror_choice - 1]
 
     # 2. Select Protocol
     print(f"\n{Colors.CYAN}--- Filter by Protocol Type ---{Colors.RESET}")
@@ -462,15 +483,12 @@ def get_user_choices():
     protocol_choice = 0
     while protocol_choice not in range(1, len(protocols) + 1):
         try:
-            choice_str = input(f"{Colors.CYAN}Select protocol type (1-{len(protocols)}, default is All): {Colors.RESET}")
-            if not choice_str:
-                protocol_choice = 1 # Default to All
-                break
-            choice = int(choice_str)
-            if 1 <= choice <= len(protocols):
-                protocol_choice = choice
+            choice = input(f"{Colors.CYAN}Select protocol type (1-{len(protocols)}, default=1): {Colors.RESET}") or "1"
+            protocol_choice = int(choice)
+            if not 1 <= protocol_choice <= len(protocols):
+                protocol_choice = 1
         except ValueError:
-            print(f"{Colors.RED}Please enter a valid number.{Colors.RESET}")
+            protocol_choice = 1
 
     selected_protocol = protocols[protocol_choice - 1]
 
@@ -483,15 +501,12 @@ def get_user_choices():
     thread_count_choice = 0
     while thread_count_choice not in range(1, len(thread_options) + 1):
         try:
-            choice_str = input(f"{Colors.CYAN}Select thread count (1-{len(thread_options)}), default is 100: {Colors.RESET}")
-            if not choice_str:
-                thread_count_choice = 4 # Default to 100
-                break
-            choice = int(choice_str)
-            if 1 <= choice <= len(thread_options):
-                thread_count_choice = choice
+            choice = input(f"{Colors.CYAN}Select thread count (1-{len(thread_options)}, default=4): {Colors.RESET}") or "4"
+            thread_count_choice = int(choice)
+            if not 1 <= thread_count_choice <= len(thread_options):
+                thread_count_choice = 4
         except ValueError:
-            print(f"{Colors.RED}Please enter a valid number.{Colors.RESET}")
+            thread_count_choice = 4
             
     selected_threads = thread_options[thread_count_choice - 1]
 
@@ -500,15 +515,13 @@ def get_user_choices():
     num_to_test = 0
     while num_to_test <= 0:
         try:
-            num_str = input(f"{Colors.CYAN}How many configs should be tested? (e.g., 50): {Colors.RESET}")
-            if num_str:
-                num = int(num_str)
-                if num > 0:
-                    num_to_test = num
-            else:
-                print(f"{Colors.RED}Please enter a number.{Colors.RESET}")
+            default_num = "50"
+            choice = input(f"{Colors.CYAN}How many configs to test? (default=50): {Colors.RESET}") or default_num
+            num_to_test = int(choice)
+            if num_to_test <= 0:
+                num_to_test = 50
         except ValueError:
-            print(f"{Colors.RED}Please enter a valid number.{Colors.RESET}")
+            num_to_test = 50
 
     return selected_mirror_url, selected_protocol, num_to_test, selected_threads
 
@@ -522,6 +535,7 @@ def run_test_flow():
     configs = tester.fetch_configs(mirror_url)
     
     if not configs:
+        log("No configs fetched. Check internet connection or mirror URL.", Colors.RED)
         return
 
     if protocol != "All":
@@ -555,7 +569,7 @@ def run_test_flow():
     kill_xray_processes()
 
     if not working_configs:
-        log("Sorry, no working configs were found.", Colors.RED)
+        log("No working configs found.", Colors.RED)
         send_notification("Freenet Test Finished", "No working configs found.")
         return
         
@@ -594,18 +608,9 @@ def view_best_configs():
 def main():
     if not os.path.exists(XRAY_PATH):
         print(f"{Colors.RED}Error: Xray executable not found at {XRAY_PATH}{Colors.RESET}")
-        print(f"{Colors.YELLOW}Please run the installer or place 'xray' in the script directory.{Colors.RESET}")
+        print(f"{Colors.YELLOW}Please download Xray core and place it in the script directory.")
+        print(f"Download from: https://github.com/XTLS/Xray-core/releases{Colors.RESET}")
         sys.exit(1)
-    
-    # Check for execute permissions and set them if not present
-    if not os.access(XRAY_PATH, os.X_OK):
-        print(f"{Colors.YELLOW}Xray executable not found or not executable. Attempting to set permissions...{Colors.RESET}")
-        try:
-            os.chmod(XRAY_PATH, 0o755)
-            log("Set execute permission for Xray.", Colors.CYAN)
-        except Exception as e:
-            print(f"{Colors.RED}Failed to set execute permission: {e}{Colors.RESET}")
-            sys.exit(1)
 
     setup_environment()
     
